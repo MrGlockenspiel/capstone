@@ -1,0 +1,23 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: redis
+    networks:
+      - api_network
+      
+  nginx:
+    image: nginx:latest
+    container_name: api_gateway
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx_service/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - catalog_service
+      - basket_service
+    networks:
+      - api_network
+
+networks:
+  api_network:
+    driver: bridge
