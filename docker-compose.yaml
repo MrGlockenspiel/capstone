@@ -1,22 +1,40 @@
 services:
   redis:
     image: redis:alpine
-    container_name: redis
+    container_name: redis_service
     networks:
       - api_network
-      
+
   nginx:
     image: nginx:latest
-    container_name: api_gateway
+    container_name: nginx_service
     ports:
       - "8080:80"
     volumes:
       - ./nginx_service/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - catalog_service
-      - basket_service
+      - frontend
+      - memory
     networks:
       - api_network
+
+  frontend:
+    image: nginx:latest
+    container_name: frontend_service
+    volumes:
+      - ./frontend_service/html:/usr/share/nginx/html:ro
+    networks:
+      - api_network
+
+  memory:
+    container_name: memory_service
+    build:
+      context: ./memory_service
+      dockerfile: Dockerfile
+    image: memory_service:latest
+    networks:
+      - api_network
+    restart: unless-stopped
 
 networks:
   api_network:
