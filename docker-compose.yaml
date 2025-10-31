@@ -11,18 +11,10 @@ services:
     ports:
       - "8080:80"
     volumes:
+      - ./frontend/html:/usr/share/nginx/html:ro
       - ./nginx_service/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
-      - memory
-    networks:
-      - api_network
-
-  frontend:
-    image: nginx:latest
-    container_name: frontend_service
-    volumes:
-      - ./frontend_service/html:/usr/share/nginx/html:ro
+      - session
     networks:
       - api_network
 
@@ -34,7 +26,33 @@ services:
     image: memory_service:latest
     networks:
       - api_network
-    restart: unless-stopped
+
+  ppu:
+    container_name: ppu_service
+    build:
+      context: ./ppu_service
+      dockerfile: Dockerfile
+    image: ppu_service:latest
+    networks:
+      - api_network
+
+  cartridge:
+    container_name: cartridge_service
+    build:
+      context: ./cartridge_service
+      dockerfile: Dockerfile
+    image: cartridge_service:latest
+    networks:
+      - api_network
+
+  session:
+    container_name: session_service
+    build:
+      context: ./session_service
+      dockerfile: Dockerfile
+    image: session_service:latest
+    networks:
+      - api_network
 
 networks:
   api_network:
