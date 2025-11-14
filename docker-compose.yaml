@@ -45,6 +45,15 @@ services:
     networks:
       - api_network
 
+  input:
+    container_name: input_service
+    build:
+      context: ./input_service
+      dockerfile: Dockerfile
+    image: input_service:latest
+    networks:
+      - api_network
+
   session:
     container_name: session_service
     build:

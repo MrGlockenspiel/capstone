@@ -5,14 +5,6 @@ import { randomInt } from "crypto";
 
 const app = express();
 
-// i forced it in nginx lol
-// app.use((req, res, next) => {
-//     res.setHeader("Access-Control-Allow-Origin", "*");
-//     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-//     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-//     next();
-// });
-
 app.use(bodyParser.json());
 
 const PPU_SERVICE = process.env.PPU_SERVICE || "http://ppu_service:8080";
