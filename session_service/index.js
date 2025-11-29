@@ -10,6 +10,7 @@ app.use(bodyParser.json());
 const PPU_SERVICE = process.env.PPU_SERVICE || "http://ppu_service:8080";
 const INPUT_SERVICE = process.env.INPUT_SERVICE || "http://input_service:8080";
 const CART_SERVICE = process.env.CART_SERVICE || "http://cartridge_service:8080";
+const CPU_SERVICE = process.env.CART_SERVICE || "http://cpu_service:8080";
 
 // in memory session store maybe ill use redis later
 const sessions = new Map();
@@ -120,6 +121,51 @@ app.post("/:id/load", async (req, res) => {
         console.error(err);
         res.status(500).json({ error: "Upload failed" });
     });
+});
+
+/**
+ * POST /session/:id/step
+ * Forwards CPU step request
+ */
+app.post("/:id/step", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!sessions.has(id)) return res.status(404).json({ error: "session not found" });
+
+    try {
+        const resp = await fetch(`${CPU_SERVICE}/${id}/step`, { method: "POST" });
+        if (!resp.ok) {
+            const text = await resp.text();
+            return res.status(resp.status).json({ error: "CPU step failed", text });
+        }
+
+        res.status(204).end();
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "CPU step error" });
+    }
+});
+
+/**
+ * GET /debug/:id
+ * Proxies CPU debug info
+ */
+app.get("/:id/debug", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!sessions.has(id)) return res.status(404).json({ error: "session not found" });
+
+    try {
+        const resp = await fetch(`${CPU_SERVICE}/debug/${id}`);
+        if (!resp.ok) {
+            const text = await resp.text();
+            return res.status(resp.status).json({ error: "CPU debug failed", text });
+        }
+
+        const data = await resp.json();
+        res.json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "CPU debug error" });
+    }
 });
 
 const PORT = process.env.PORT || 8080;

@@ -53,6 +53,15 @@ services:
     image: input_service:latest
     networks:
       - api_network
+  
+  cpu:
+    container_name: cpu_service
+    build:
+      context: ./cpu_service
+      dockerfile: Dockerfile
+    image: cpu_service:latest
+    networks:
+      - api_network
 
   session:
     container_name: session_service

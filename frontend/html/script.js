@@ -3,6 +3,9 @@ let sessionId = null;
 let running = false;
 
 const status_el = document.getElementById("status");
+const debug_el = document.getElementById("debug-output");
+const debug_cb = document.getElementById("debug");
+
 const canvas = document.getElementById("screen");
 const ctx = canvas.getContext("2d");
 const image_data = ctx.createImageData(WIDTH, HEIGHT);
@@ -36,13 +39,21 @@ async function poll_framebuffer() {
                 image_data.data.set(bytes);
                 ctx.putImageData(image_data, 0, 0);
             }
+
+            if (debug_cb.checked) {
+                const dbg = await fetch(`/session/${sessionId}/debug`);
+                if (dbg.ok) {
+                    const cpuState = await dbg.json();
+                    debug_el.textContent = JSON.stringify(cpuState, null, 2);
+                }
+            }
+
         } catch (e) {
             console.error("Framebuffer error:", e);
             await sleep(200);
         }
 
-        // 60fps = 16.66667ms
-        await sleep(16);
+        await sleep(16); // ~60fps
     }
 }
 
@@ -75,7 +86,6 @@ const state = { up: false, down: false, left: false, right: false, a: false, b: 
 
 document.addEventListener("keydown", e => {
     const k = keyMap[e.key];
-
     if (k && !state[k]) {
         state[k] = true;
         send_input(state);
@@ -84,7 +94,6 @@ document.addEventListener("keydown", e => {
 
 document.addEventListener("keyup", e => {
     const k = keyMap[e.key];
-
     if (k && state[k]) {
         state[k] = false;
         send_input(state);
@@ -128,5 +137,37 @@ document.getElementById("load-rom").onclick = async () => {
     } catch (e) {
         console.error("ROM load error:", e);
         alert("ROM load failed, check console");
+    }
+};
+
+// ---------------------------
+// Step button
+// ---------------------------
+document.getElementById("step").onclick = async () => {
+    if (!sessionId) {
+        alert("Start a session first!");
+        return;
+    }
+
+    try {
+        const res = await fetch(`/session/${sessionId}/step`, { method: "POST" });
+        if (!res.ok) {
+            alert("Step failed: " + res.status);
+            return;
+        }
+
+        // If debug checkbox is checked, fetch CPU state immediately
+        if (debug_cb.checked) {
+            const dbg = await fetch(`/session/${sessionId}/debug`);
+            if (dbg.ok) {
+                const cpuState = await dbg.json();
+                console.log(dbg);
+                debug_el.textContent = JSON.stringify(cpuState, null, 2);
+            }
+        }
+
+    } catch (e) {
+        console.error("Step error:", e);
+        alert("Step failed, check console");
     }
 };
