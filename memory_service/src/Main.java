@@ -24,13 +24,9 @@ public class Main {
             String path = exchange.getRequestURI().getPath();
             String query = exchange.getRequestURI().getQuery();
 
-            // GET /instance/address
-            // POST /instance/address
-            //
-            // { "{instance}", "{address}" }
-
             String[] parts = path.split("/");
             if (parts.length < 3) {
+                System.out.println("Invalid request path: " + path);
                 exchange.sendResponseHeaders(400, -1);
                 return;
             }
@@ -45,19 +41,22 @@ public class Main {
                 }
 
                 if (address < 0 || address + len > MEMORY_SIZE) {
+                    System.out.printf("Invalid memory range: instance=%d, address=0x%04X, len=%d%n", instance, address, len);
                     exchange.sendResponseHeaders(400, -1);
                     return;
                 }
 
                 byte[] memory = memoryMap.computeIfAbsent(instance, k -> new byte[MEMORY_SIZE]);
 
-                if ("GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                if ("GET".equalsIgnoreCase(method)) {
+                    System.out.printf("[GET]  Instance %d, Address 0x%04X, Length %d%n", instance, address, len);
                     exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
                     exchange.sendResponseHeaders(200, len);
                     try (OutputStream os = exchange.getResponseBody()) {
                         os.write(memory, address, len);
                     }
-                } else if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                } else if ("POST".equalsIgnoreCase(method)) {
+                    System.out.printf("[POST] Instance %d, Address 0x%04X, Length %d%n", instance, address, len);
                     InputStream is = exchange.getRequestBody();
                     int readTotal = 0;
                     while (readTotal < len) {
@@ -68,14 +67,17 @@ public class Main {
                     exchange.sendResponseHeaders(200, 0); // no body
                     exchange.getResponseBody().close();
                 } else {
+                    System.out.println("Unsupported method: " + method);
                     exchange.sendResponseHeaders(405, -1);
                 }
 
             } catch (NumberFormatException e) {
+                System.out.println("Invalid number in path: " + path);
                 exchange.sendResponseHeaders(400, -1);
             }
         }
     }
+
 
     public static void main(String[] args) throws IOException {
         final int port = 8080;
