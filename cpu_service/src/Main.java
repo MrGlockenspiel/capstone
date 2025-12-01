@@ -48,6 +48,7 @@ public class Main {
 
             } catch (NumberFormatException e) {
                 exchange.sendResponseHeaders(400, -1);
+                e.printStackTrace();
             } catch (Exception e) {
                 exchange.sendResponseHeaders(500, -1);
                 e.printStackTrace();

@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Main {
-    private static final int MEMORY_SIZE = 0xFFFF;
+    private static final int MEMORY_SIZE = 0x10000;
     private static final Map<Integer, byte[]> memoryMap = new ConcurrentHashMap<>();
 
     static class MemoryHandler implements HttpHandler {
