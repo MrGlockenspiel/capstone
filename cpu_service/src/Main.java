@@ -38,7 +38,8 @@ public class Main {
                 int cpuId = Integer.parseInt(parts[1]);
                 Cpu cpu = cpuMap.computeIfAbsent(cpuId, id -> new Cpu(cpuId));
 
-                cpu.step(); // execute one instruction
+                //cpu.step(); // execute one instruction
+                cpu.start();
 
                 String response = "OK";
                 exchange.sendResponseHeaders(200, response.getBytes().length);

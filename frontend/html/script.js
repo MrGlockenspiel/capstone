@@ -140,9 +140,7 @@ document.getElementById("load-rom").onclick = async () => {
     }
 };
 
-// ---------------------------
-// Step button
-// ---------------------------
+// step button
 document.getElementById("step").onclick = async () => {
     if (!sessionId) {
         alert("Start a session first!");

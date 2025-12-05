@@ -17,6 +17,9 @@ public class Cpu {
     private Instruction[] cbTable = new Instruction[256];
     
     private int cycles = 0;
+    
+    private boolean interruptsEnabled = false;
+    private boolean imeQueued = false;
 
     public Cpu(int id) {
         this.id = id;
@@ -31,8 +34,18 @@ public class Cpu {
         InstructionDecoder.buildInstructionTable(this);
         InstructionDecoder.buildCbInstructionTable(this);
     }
+    
+    public static byte BYTE(int n) {
+        return (byte) (n & 0xFF);
+    }
+
+    public static short SHORT(int n) {
+        return (short) (n & 0xFFFF);
+    }
 
     public void step() throws Exception {
+        handleInterrupts();
+
         // Print BEFORE state
         System.out.println("=== BEFORE ===");
         printState();
@@ -41,7 +54,7 @@ public class Cpu {
         System.out.println(String.format("PC: 0x%04X  Opcode: 0x%X", PC, opcode == 0xCB ? ((opcode << 8 ) | (read8(PC + 1) & 0xFF)) : opcode));
 
         PC++;
-
+        
         Instruction ins;
 
         if (opcode == 0xCB) {
@@ -62,6 +75,10 @@ public class Cpu {
         // Execute instruction
         ins.execute(this);
 
+        if (imeQueued) {
+            interruptsEnabled = true;
+        }
+
         // Print AFTER state
         System.out.println("=== AFTER ===");
         printState();
@@ -69,8 +86,19 @@ public class Cpu {
     }
 
     public void step_no_stdout() throws Exception {
-        int opcode = read8(PC) & 0xFF;
+        // trigger vblank interrupt at LY = 144
+        int cyclesInFrame = this.cycles % 70224;
+        int ly = cyclesInFrame / 456;
 
+        if (ly == 144) {
+            // set the vblank bit in IF (bit 0)
+            byte currentIF = getIF();
+            setIF((byte)(currentIF | 0x01));
+        }
+
+        handleInterrupts();
+
+        int opcode = read8(PC) & 0xFF;
         PC++;
 
         Instruction ins;
@@ -88,9 +116,15 @@ public class Cpu {
                 throw new RuntimeException(String.format("Unimplemented opcode: 0x%02X", opcode));
             }
         }
+        
+        //System.out.printf("got instruction '%s' at %d (0x%04X)\n", ins.name(), PC & 0xFFFF, PC & 0xFFFF);
 
-        // execute instruction
         ins.execute(this);
+
+        if (imeQueued) {
+            interruptsEnabled = true;
+            imeQueued = false;
+        }
     }
 
     private volatile boolean running = false;
@@ -191,6 +225,14 @@ public class Cpu {
     }
 
     // AF pair
+    public short getAF() {
+        return SHORT((getA() << 8) | getF());
+    }
+    
+    public void setAF(short v) {
+        this.AF = SHORT(v & 0xF0);
+    }
+
     public byte getA() {
         return hi(AF);
     }
@@ -441,4 +483,109 @@ public class Cpu {
             System.out.println(e);
         }
     }
+    
+    public void enableInterrupts() {
+        imeQueued = true;  // will be applied after next instruction
+    }
+
+    private void applyIMEQueued() {
+        if (imeQueued) {
+            interruptsEnabled = true;
+            imeQueued = false;
+        }
+    }
+
+    public void disableInterrupts() {
+        this.interruptsEnabled = false;
+    }
+    
+    public byte pop8() throws Exception {
+        short sp = getSP();
+        byte value = read8(sp);
+        setSP(SHORT(sp + 1));
+        return value;
+    }
+
+    public void push8(byte value) throws Exception {
+        short sp = SHORT(getSP() - 1);
+        write8(sp, value);
+        setSP(sp);
+    }
+
+    public short pop16() throws Exception {
+        byte low = pop8();
+        byte high = pop8();
+
+        return SHORT((high << 8) | (low));
+    }
+
+    public void push16(short value) throws Exception {
+        byte high = BYTE(value >> 8);
+        byte low  = BYTE(value);
+
+        push8(high);
+        push8(low);
+    }
+    
+    public int getCycles() {
+        return this.cycles;
+    }
+    
+    private void handleInterrupts() throws Exception {
+        if (!interruptsEnabled) {
+            return;
+        }
+
+        byte ie = getIE();
+        byte flag = getIF();
+        byte fired = (byte)(ie & flag);
+
+        if (fired == 0) {
+            return; // no interrupt to service
+        }
+
+        interruptsEnabled = false; // disable further interrupts
+        push16(PC); // push PC onto stack
+
+        //if (fired > 0) {
+        //    System.out.printf("handling interrupts (ie=%02X, flag=%02X, fired=%02X)\n", ie & 0xFF, flag & 0xFF, fired & 0xFF);
+        //}
+
+        // service interrupts in order: V-Blank -> Joypad
+        if ((fired & 0x01) != 0) { // V-Blank
+            PC = 0x40;
+            setIF((byte)(flag & ~0x01));
+            //System.out.printf("VBLANK INT FIRED!!!!!!! NEW PC = 0x%04X\n", PC & 0xFFFF);
+        } else if ((fired & 0x02) != 0) { // LCD STAT
+            PC = 0x48;
+            setIF((byte)(flag & ~0x02));
+        } else if ((fired & 0x04) != 0) { // Timer
+            PC = 0x50;
+            setIF((byte)(flag & ~0x04));
+        } else if ((fired & 0x08) != 0) { // Serial
+            PC = 0x58;
+            setIF((byte)(flag & ~0x08));
+        } else if ((fired & 0x10) != 0) { // Joypad
+            PC = 0x60;
+            setIF((byte)(flag & ~0x10));
+        }
+    }
+
+
+    public byte getIF() {
+        return read8(0xFF0F);
+    }
+
+    public void setIF(byte value) {
+        write8(0xFF0F, value);
+    }
+
+    public byte getIE() {
+        return read8(0xFFFF);
+    }
+
+    public void setIE(byte value) {
+        write8(0xFFFF, value);
+    }
+
 }

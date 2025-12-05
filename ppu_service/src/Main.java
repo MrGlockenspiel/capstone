@@ -22,9 +22,9 @@ public class Main {
     // palette mapping (DMG shades)
     private static final int[] PALETTE = new int[]{
             0xFFFFFFFF, // white
-            0xFFAAAAAA, // light gray
-            0xFF555555, // dark gray
-            0xFF000000  // black
+            0xAAAAAAFF, // light gray
+            0x555555FF, // dark gray
+            0x000000FF  // black
     };
 
     public static void main(String[] args) throws IOException {
@@ -69,15 +69,64 @@ public class Main {
     private static byte[] renderFrame(String consoleId) throws IOException {
         byte[] framebuffer = new byte[SCREEN_WIDTH * SCREEN_HEIGHT * 4];
 
-        // fetch VRAM and OAM
+        // fetch VRAM, OAM, and LCD registers
         byte[] vram = fetchMemory(consoleId, VRAM_START, VRAM_SIZE);
         byte[] oam = fetchMemory(consoleId, OAM_START, OAM_SIZE);
+        byte[] lcdRegs = fetchMemory(consoleId, 0xFF40, 0x10); // FF40-FF4F
+        
+        byte[] palettes = fetchMemory(consoleId, 0xFF47, 3); // BGP, OBP0, OBP1
+        int bgPalette = palettes[0] & 0xFF;
+        int obp0 = palettes[1] & 0xFF;
+        int obp1 = palettes[2] & 0xFF;
+        
+        int[] colorMapping = new int[4];
+        colorMapping[0] = bgPalette & 0x03;
+        colorMapping[1] = (bgPalette >> 2) & 0x03;
+        colorMapping[2] = (bgPalette >> 4) & 0x03;
+        colorMapping[3] = (bgPalette >> 4) & 0x03;
 
-        // render background (INACCURATE: full 32x32 tiles, no scrolling/window)
-        for (int tileY = 0; tileY < 18; tileY++) { // 144/8
-            for (int tileX = 0; tileX < 20; tileX++) { // 160/8
-                int tileIndex = vram[0x1800 + tileY * 32 + tileX] & 0xFF; // BG map at 0x9800 -> offset 0x1800 in VRAM
-                renderTile(vram, tileIndex, tileX * 8, tileY * 8, framebuffer);
+        int scx = lcdRegs[3] & 0xFF; // FF43
+        int scy = lcdRegs[2] & 0xFF; // FF42
+        boolean bgTileDataSelect = (lcdRegs[0] & 0x10) != 0; // FF40 bit 4
+        int bgMapSelect = (lcdRegs[0] & 0x08) != 0 ? 0x1C00 : 0x1800; // FF40 bit 3
+
+        // render background
+        for (int screenY = 0; screenY < SCREEN_HEIGHT; screenY++) {
+            int bgY = (screenY + scy) & 0xFF; // wrap around 256
+            int tileY = bgY / 8;
+            int pixelY = bgY % 8;
+
+            for (int screenX = 0; screenX < SCREEN_WIDTH; screenX++) {
+                int bgX = (screenX + scx) & 0xFF; // wrap around 256
+                int tileX = bgX / 8;
+                int pixelX = bgX % 8;
+
+                // choose BG map
+                int tileIndex = vram[bgMapSelect + tileY * 32 + tileX] & 0xFF;
+
+                int tileAddr;
+                if (bgTileDataSelect) {
+                    // $8000 mode
+                    tileAddr = tileIndex * 16;
+                } else {
+                    // $9000 mode, signed index
+                    tileIndex = (byte) tileIndex; // sign extension (sext lmaio)
+                    tileAddr = 0x1000 + tileIndex * 16; // $9000 in VRAM
+                }
+
+                byte b1 = vram[tileAddr + pixelY * 2];
+                byte b2 = vram[tileAddr + pixelY * 2 + 1];
+
+                int colorBit = ((b2 >> (7 - pixelX)) & 1) << 1 | ((b1 >> (7 - pixelX)) & 1);
+
+                int offset = (screenY * SCREEN_WIDTH + screenX) * 4;
+                
+                int color = PALETTE[colorMapping[colorBit]]; // still using fixed palette
+                
+                framebuffer[offset] = (byte) ((color >> 24) & 0xFF);
+                framebuffer[offset + 1] = (byte) ((color >> 16) & 0xFF);
+                framebuffer[offset + 2] = (byte) ((color >> 8) & 0xFF);
+                framebuffer[offset + 3] = (byte) (color & 0xFF);
             }
         }
 
@@ -91,30 +140,29 @@ public class Main {
             boolean xFlip = (attributes & 0x20) != 0;
             boolean yFlip = (attributes & 0x40) != 0;
 
-            renderTile(vram, tileIndex, xPos, yPos, framebuffer, xFlip, yFlip, true);
+            renderTile(vram, tileIndex, xPos, yPos, framebuffer, xFlip, yFlip, true, bgPalette, obp0, obp1);
         }
 
         return framebuffer;
     }
 
-    private static void renderTile(byte[] vram, int tileIndex, int startX, int startY, byte[] framebuffer) {
-        renderTile(vram, tileIndex, startX, startY, framebuffer, false, false, false);
-    }
-
-    // completely guessing, untested
     private static void renderTile(byte[] vram, int tileIndex, int startX, int startY, byte[] framebuffer,
-                                   boolean xFlip, boolean yFlip, boolean isSprite) {
-        int tileAddr = 0x0000 + tileIndex * 16; // 16 bytes per tile
+                                boolean xFlip, boolean yFlip, boolean isSprite,
+                                int bgPalette, int obp0, int obp1) {
+
+        int tileAddr = tileIndex * 16; // 16 bytes per tile
+
         for (int row = 0; row < 8; row++) {
             int srcRow = yFlip ? 7 - row : row;
             byte b1 = vram[tileAddr + srcRow * 2];
             byte b2 = vram[tileAddr + srcRow * 2 + 1];
 
             for (int col = 0; col < 8; col++) {
-                int srcCol = xFlip ? col : 7 - col;
-                int colorBit = ((b1 >> srcCol) & 1) | (((b2 >> srcCol) & 1) << 1);
+                int srcCol = xFlip ? 7 - col : col;
+
+                int colorBit = ((b2 >> (7 - srcCol)) & 1) << 1 | ((b1 >> (7 - srcCol)) & 1);
                 if (colorBit == 0 && isSprite) {
-                    continue; // transparent sprite pixel
+                    continue; // transparent pixel
                 }
 
                 int pixelX = startX + col;
@@ -122,7 +170,15 @@ public class Main {
                 if (pixelX < 0 || pixelX >= SCREEN_WIDTH || pixelY < 0 || pixelY >= SCREEN_HEIGHT) continue;
 
                 int offset = (pixelY * SCREEN_WIDTH + pixelX) * 4;
-                int color = PALETTE[colorBit];
+
+                int color;
+                if (isSprite) {
+                    boolean useObp1 = ((colorBit & 2) != 0);
+                    color = PALETTE[(useObp1 ? obp1 : obp0) & 0x03];
+                } else {
+                    color = PALETTE[bgPalette & 0x03];
+                }
+
                 framebuffer[offset] = (byte) ((color >> 24) & 0xFF);
                 framebuffer[offset + 1] = (byte) ((color >> 16) & 0xFF);
                 framebuffer[offset + 2] = (byte) ((color >> 8) & 0xFF);
@@ -130,6 +186,7 @@ public class Main {
             }
         }
     }
+
 
     private static byte[] fetchMemory(String consoleId, int address, int len) throws IOException {
         String urlStr = String.format("http://memory_service:8080/%s/%d?len=%d", consoleId, address, len);
