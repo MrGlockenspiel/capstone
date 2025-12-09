@@ -146,6 +146,28 @@ app.post("/:id/step", async (req, res) => {
 });
 
 /**
+ * POST /session/:id/reset
+ * Forwards CPU step request
+ */
+app.post("/:id/reset", async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!sessions.has(id)) return res.status(404).json({ error: "session not found" });
+
+    try {
+        const resp = await fetch(`${CPU_SERVICE}/${id}/reset`, { method: "POST" });
+        if (!resp.ok) {
+            const text = await resp.text();
+            return res.status(resp.status).json({ error: "CPU step failed", text });
+        }
+
+        res.status(204).end();
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "CPU step error" });
+    }
+});
+
+/**
  * GET /debug/:id
  * Proxies CPU debug info
  */

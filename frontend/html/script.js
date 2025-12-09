@@ -150,7 +150,7 @@ document.getElementById("step").onclick = async () => {
     try {
         const res = await fetch(`/session/${sessionId}/step`, { method: "POST" });
         if (!res.ok) {
-            alert("Step failed: " + res.status);
+            alert("Start failed: " + res.status);
             return;
         }
 
@@ -167,5 +167,35 @@ document.getElementById("step").onclick = async () => {
     } catch (e) {
         console.error("Step error:", e);
         alert("Step failed, check console");
+    }
+};
+
+// reset button
+document.getElementById("reset").onclick = async () => {
+    if (!sessionId) {
+        alert("Start a session first!");
+        return;
+    }
+
+    try {
+        const res = await fetch(`/session/${sessionId}/reset`, { method: "POST" });
+        if (!res.ok) {
+            alert("Step failed: " + res.status);
+            return;
+        }
+
+        // If debug checkbox is checked, fetch CPU state immediately
+        if (debug_cb.checked) {
+            const dbg = await fetch(`/session/${sessionId}/debug`);
+            if (dbg.ok) {
+                const cpuState = await dbg.json();
+                console.log(dbg);
+                debug_el.textContent = JSON.stringify(cpuState, null, 2);
+            }
+        }
+
+    } catch (e) {
+        console.error("Reset error:", e);
+        alert("Reset failed, check console");
     }
 };

@@ -24,7 +24,7 @@ public class Main {
             String path = exchange.getRequestURI().getPath();
 
             String[] parts = path.split("/");
-            if (parts.length < 3 || !"step".equalsIgnoreCase(parts[2])) {
+            if (parts.length < 3 || (!"step".equalsIgnoreCase(parts[2]) && !"reset".equalsIgnoreCase(parts[2]))) {
                 exchange.sendResponseHeaders(404, -1);
                 return;
             }
@@ -34,25 +34,49 @@ public class Main {
                 return;
             }
 
-            try {
-                int cpuId = Integer.parseInt(parts[1]);
-                Cpu cpu = cpuMap.computeIfAbsent(cpuId, id -> new Cpu(cpuId));
+            if ("step".equalsIgnoreCase(parts[2])) {
+                try {
+                    int cpuId = Integer.parseInt(parts[1]);
+                    Cpu cpu = cpuMap.computeIfAbsent(cpuId, id -> new Cpu(cpuId));
 
-                //cpu.step(); // execute one instruction
-                cpu.start();
+                    //cpu.step(); // execute one instruction
+                    cpu.start();
 
-                String response = "OK";
-                exchange.sendResponseHeaders(200, response.getBytes().length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
+                    String response = "OK";
+                    exchange.sendResponseHeaders(200, response.getBytes().length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
+
+                } catch (NumberFormatException e) {
+                    exchange.sendResponseHeaders(400, -1);
+                    e.printStackTrace();
+                } catch (Exception e) {
+                    exchange.sendResponseHeaders(500, -1);
+                    e.printStackTrace();
                 }
+            } else if ("reset".equalsIgnoreCase(parts[2])) {
+                try {
+                    int cpuId = Integer.parseInt(parts[1]);
+                    Cpu cpu = cpuMap.computeIfAbsent(cpuId, id -> new Cpu(cpuId));
 
-            } catch (NumberFormatException e) {
-                exchange.sendResponseHeaders(400, -1);
-                e.printStackTrace();
-            } catch (Exception e) {
-                exchange.sendResponseHeaders(500, -1);
-                e.printStackTrace();
+                    //cpu.step(); // execute one instruction
+                    cpu.halt();
+                    cpu.reset();
+
+                    String response = "OK";
+                    exchange.sendResponseHeaders(200, response.getBytes().length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(response.getBytes());
+                    }
+
+                } catch (NumberFormatException e) {
+                    exchange.sendResponseHeaders(400, -1);
+                    e.printStackTrace();
+                } catch (Exception e) {
+                    exchange.sendResponseHeaders(500, -1);
+                    e.printStackTrace();
+                }
             }
         }
     }

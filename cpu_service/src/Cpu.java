@@ -34,6 +34,15 @@ public class Cpu {
         InstructionDecoder.buildInstructionTable(this);
         InstructionDecoder.buildCbInstructionTable(this);
     }
+
+    public void reset() {
+        this.AF = 0;
+        this.BC = 0;
+        this.DE = 0;
+        this.HL = 0;
+        this.SP = 0;
+        this.PC = 0;
+    }
     
     public static byte BYTE(int n) {
         return (byte) (n & 0xFF);
